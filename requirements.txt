@@ -1,0 +1,16 @@
+smart_open
+dill
+cytoolz
+tqdm
+typing-extensions
+typeguard==2.13.3
+pyyaml
+termcolor
+requests
+packaging
+langid
+rich
+scipy
+numpy
+torchaudio>=0.11.0
+torch>=1.11.0

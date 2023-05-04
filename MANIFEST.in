@@ -1,0 +1,7 @@
+include uphill/VERSION
+include requirements.txt
+include README.md
+
+recursive-include uphilll *.yaml
+recursive-include uphill *.json
+recursive-include uphill *.model
