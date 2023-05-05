@@ -12,6 +12,10 @@ def get_logger(
 ) -> logging.Logger:
     logger = logging.getLogger("uphill")
     logger.setLevel(logging.DEBUG)
+    # remove existed handler
+    if len(logger.handlers) > 0:
+        for handler in logger.handlers:
+            logger.removeHandler(handler)
     logger.addHandler(
         stream_handler(
             level=logging.INFO,
@@ -95,8 +99,8 @@ class ColoredFormatter(logging.Formatter):
 ###############
 class LoggerX(object):
     def __init__(self):
-        self._initialized = False
         self.detail_level = int(os.environ.get("DETAIL_LEVEL", 1))
+        self.logger = get_logger(filepath=None, detail_level=self.detail_level)
 
     def initialize(
         self, 
@@ -107,17 +111,11 @@ class LoggerX(object):
         '''
         Initialize LoggerX
 
-        inputs
-        - logdir - where to write logfiles
-        - to_file - whether to write log to files
-        - debug - write full details to log record
+        params
+            - logdir - where to write logfiles
+            - to_file - whether to write log to files
+            - debug - write full details to log record
         '''
-        if self._initialized:
-            self.logger.warning(
-                "loggerx has been initialized, cannot initialize again", 
-                stacklevel=3
-            )
-            return
         self.detail_level = self.detail_level if detail_level is None else detail_level
         log_path = None
         if to_file:
@@ -130,12 +128,11 @@ class LoggerX(object):
             from uphill.core.utils.timing import current_datetime
             log_path = logdir / f'uphill.{current_datetime()}.log'
         self.logger = get_logger(filepath=log_path, detail_level=self.detail_level)
-        self._initialized = True
 
     def __del__(self):
         return
 
-    def __check_msg(self, msg: Any=""):
+    def _check_msg(self, msg: Any=""):
         if msg is None or len(msg) == 0:
             self.logger.warning(
                 "empty message for logger is not recommended, skip", 
@@ -144,49 +141,31 @@ class LoggerX(object):
             return False
         return True
     
-    def __check_initialized(self):
-        if not self._initialized:
-            print(
-                colored(
-                    "using loggerx before `initialize` is not recommended, "\
-                    "here initialize to console logger automatically",
-                    "red"
-                )
-            )
-            self.initialize()
-        return
-    
     #### logger functions
-    def debug(self, msg: Any="", *args, **kwargs):
-        self.__check_initialized()
-        if not self.__check_msg(msg):
+    def debug(self, msg: Any, stacklevel=2, *args, **kwargs):
+        if not self._check_msg(msg):
             return
-        self.logger.debug(msg, stacklevel=2, *args, **kwargs)
+        self.logger.debug(msg, stacklevel=stacklevel, *args, **kwargs)
     
-    def info(self, msg: Any="", *args, **kwargs):
-        self.__check_initialized()
-        if not self.__check_msg(msg):
+    def info(self, msg: Any, stacklevel=2, *args, **kwargs):
+        if not self._check_msg(msg):
             return
-        self.logger.info(msg, stacklevel=2, *args, **kwargs)
+        self.logger.info(msg, stacklevel=stacklevel, *args, **kwargs)
     
-    def warning(self, msg: Any="", *args, **kwargs):
-        self.__check_initialized()
-        if not self.__check_msg(msg):
+    def warning(self, msg: Any, stacklevel=2, *args, **kwargs):
+        if not self._check_msg(msg):
             return
-        self.logger.warning(msg, stacklevel=2, *args, **kwargs)
+        self.logger.warning(msg, stacklevel=stacklevel, *args, **kwargs)
     
-    def error(self, msg: Any="", *args, **kwargs):
-        self.__check_initialized()
-        if not self.__check_msg(msg):
+    def error(self, msg: Any, stacklevel=2, *args, **kwargs):
+        if not self._check_msg(msg):
             return
-        self.logger.error(msg, stacklevel=2, *args, **kwargs)
+        self.logger.error(msg, stacklevel=stacklevel, *args, **kwargs)
     
-    def critical(self, msg: Any="", *args, **kwargs):
-        self.__check_initialized()
-        if not self.__check_msg(msg):
+    def critical(self, msg: Any, stacklevel=2, *args, **kwargs):
+        if not self._check_msg(msg):
             return
-        self.logger.critical(msg, stacklevel=2, *args, **kwargs)
+        self.logger.critical(msg, stacklevel=stacklevel, *args, **kwargs)
 
 
-global loggerx 
 loggerx = LoggerX()
