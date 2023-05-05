@@ -11,7 +11,7 @@ def add_arg_group(parser, title):
 
 def set_base_parser():
     parser = argparse.ArgumentParser(
-        epilog='%s, a toolkit to process dataset easily. '
+        epilog='%s, a toolkit based on pytorch. '
         'Visit %s for tutorials and documents.' % (
             colored('uphill v%s' % __version__, 'green'),
             colored(
@@ -21,7 +21,7 @@ def set_base_parser():
             ),
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='Uphill Line Interface',
+        description='MountainTop Line Interface',
     )
 
     parser.add_argument(
