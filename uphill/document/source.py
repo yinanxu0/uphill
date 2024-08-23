@@ -19,7 +19,7 @@ from typing import (
 )
 from typing_extensions import Literal
 
-
+import uphill
 from uphill.errors import InitClassError
 from uphill.core.audio import (
     read_audio,
@@ -37,6 +37,8 @@ from uphill import loggerx
 from .mixins import AllMixin
 from .helper import _uri_to_blob, _to_datauri
 
+
+_Type = "datasource"
 
 @dataclass(repr=False, eq=False)
 class DataSource(AllMixin):
@@ -62,13 +64,13 @@ class DataSource(AllMixin):
     
     def __init_subclass__(cls, **kwargs):
         if cls.__name__ not in DataSource.NAME_TO_DATASOURCE:
-            key_name = cls.__name__.lower().replace("datasource", "")
+            key_name = cls.__name__.lower().replace(_Type, "")
             DataSource.NAME_TO_DATASOURCE[key_name] = cls
             DataSource.DATASOURCE_TO_NAME[cls] = key_name
         super().__init_subclass__(**kwargs)
     
     def __post_init__(self):
-        key_name = self.__class__.__name__.lower().replace("datasource", "")
+        key_name = self.__class__.__name__.lower().replace(_Type, "")
         if key_name != "text" and self.uri is None and self._blob is None and self._tensor is None:
             raise InitClassError("mime_type in ['uri', 'blob', 'tensor'] should at least one non NoneType")
         if self.uri is not None and not self.mime_type:
@@ -177,19 +179,24 @@ class DataSource(AllMixin):
 
     @staticmethod
     def from_dict(data: dict) -> "DataSource":
-        DataSourceClass = DataSource
-        if "__classname__" in data:
-            DataSourceClass = DataSource.NAME_TO_DATASOURCE[data.pop("__classname__")]
-        return DataSourceClass(**data)
+        assert data.get("_type", None) == _Type, f'failed load data beacuse data type expected datasource but got {data["_type"]}'
+        assert uphill.check_package_version(data.get("_version", "0.0.0"))
+        assert "_classname" in data, f'failed load data beacuse no classname'
+        assert data.get("_classname") in DataSource.NAME_TO_DATASOURCE, f'failed load data beacuse classname not valid'
+        return DataSource.NAME_TO_DATASOURCE[data.get("_classname")](**(data.get("data")))
 
     
     ###########################
     ### exporting functions ###
     ###########################
-    def to_dict(self) -> dict:
-        doc_info = asdict_nonull(self)
-        doc_info["__classname__"] = self.DATASOURCE_TO_NAME[self.__class__]
-        return doc_info
+    def to_dict(self, sanity=False) -> dict:
+        data = {
+            "data": asdict_nonull(self),
+            "_version": uphill.__version__,
+            "_classname": self.DATASOURCE_TO_NAME[self.__class__],
+            "_type": _Type,
+        }
+        return data if not sanity else data["data"]
 
 
     ##################

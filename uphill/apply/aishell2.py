@@ -15,7 +15,7 @@ from uphill import loggerx
 
 def prepare(
     corpus_dir: Pathlike,
-    target_dir: Optional[Pathlike] = None,
+    output_dir: Optional[Pathlike] = None,
     num_jobs: int = 1,
     compress: bool = False,
     remove_space: bool = True
@@ -23,7 +23,7 @@ def prepare(
     """
     Returns the manifests which consist of the Recordings and Supervisions
     :param corpus_dir: Pathlike, the path of the data dir.
-    :param target_dir: Pathlike, the path where to write the manifests.
+    :param output_dir: Pathlike, the path where to write the manifests.
     :return: a Dict whose key is the dataset part, and the value is Dicts with the keys 'recordings' and 'supervisions'.
     """
     corpus_dir = Path(corpus_dir)
@@ -52,9 +52,9 @@ def prepare(
             loggerx.warning(error_message)
             sys.exit()
     
-    if target_dir is not None:
-        target_dir = Path(target_dir)
-        target_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     manifests = defaultdict(dict)
     for part in dataset_parts:
@@ -80,7 +80,7 @@ def prepare(
         vocab.insert(0, '<blank>')
         vocab.insert(1, '<unk>')
         vocab.append('<sos/eos>')
-        vocab.to_file(target_dir / "words.txt")
+        vocab.to_file(output_dir / "words.txt")
         
         da_wav = DocumentArray.from_dir(wav_path, pattern="*.wav", num_jobs=num_jobs)
         sa = SupervisionArray()
@@ -118,13 +118,13 @@ def prepare(
                         )
                     )
         
-        if target_dir is not None:
+        if output_dir is not None:
             target_extension = ""
             if compress:
                 target_extension = ".gz"
-            sa.to_file(target_dir / f"supervisions_{part}.jsonl{target_extension}")
-            da_wav.to_file(target_dir / f"wav_documents_{part}.jsonl{target_extension}")
-            da_text.to_file(target_dir / f"text_documents_{part}.jsonl{target_extension}")
+            sa.to_file(output_dir / f"supervisions_{part}.jsonl{target_extension}")
+            da_wav.to_file(output_dir / f"wav_documents_{part}.jsonl{target_extension}")
+            da_text.to_file(output_dir / f"text_documents_{part}.jsonl{target_extension}")
         manifests[part] = {
             "wav_documents": da_wav, 
             "text_documents": da_text, 

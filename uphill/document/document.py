@@ -17,6 +17,7 @@ from typing import (
 from typeguard import check_argument_types
 
 
+import uphill
 from uphill.core.utils import (
     ArrayType, Pathlike, Channels, Seconds,
     fastcopy, asdict_nonull
@@ -33,6 +34,8 @@ from .mixins import AllMixin
 from .source import DataSource, AlignmentDataSource
 
 
+_Type = "document"
+
 @dataclass(repr=False, eq=False)
 class Document(AllMixin):
     
@@ -47,7 +50,7 @@ class Document(AllMixin):
 
     def __init_subclass__(cls, **kwargs):
         if cls.__name__ not in Document.NAME_TO_DOCUMENT:
-            key_name = cls.__name__.lower().replace("document", "")
+            key_name = cls.__name__.lower().replace(_Type, "")
             Document.NAME_TO_DOCUMENT[key_name] = cls
             Document.DOCUMENT_TO_NAME[cls] = key_name
         super().__init_subclass__(**kwargs)
@@ -205,23 +208,27 @@ class Document(AllMixin):
 
     @staticmethod
     def from_dict(data: dict) -> "Document":
-        DocumentClass = Document
-        if "__classname__" in data:
-            DocumentClass = Document.NAME_TO_DOCUMENT[data.pop("__classname__")]
-        raw_sources = data.pop("sources")
-        return DocumentClass(
-            sources=[DataSource.from_dict(s) for s in raw_sources], **data
+        assert data.get("_type", None) == _Type, f'failed load data beacuse data type expected document but got {data["_type"]}'
+        assert uphill.check_package_version(data.get("_version", "0.0.0"))
+        assert "_classname" in data, f'failed load data beacuse no classname'
+        assert data.get("_classname") in Document.NAME_TO_DOCUMENT, f'failed load data beacuse classname not valid'
+        return Document.NAME_TO_DOCUMENT[data.get("_classname")](
+            sources=[DataSource.from_dict(s) for s in data.get("data").pop("sources")], **(data.get("data"))
         )
 
 
     ###########################
     ### exporting functions ###
     ###########################
-    def to_dict(self) -> dict:
-        doc_info = asdict_nonull(self)
-        doc_info['sources'] = [s.to_dict() for s in self.sources]
-        doc_info["__classname__"] = self.DOCUMENT_TO_NAME[self.__class__]
-        return doc_info
+    def to_dict(self, sanity=False) -> dict:
+        data = {
+            "data": asdict_nonull(self),
+            "_version": uphill.__version__,
+            "_classname": self.DOCUMENT_TO_NAME[self.__class__],
+            "_type": _Type,
+        }
+        data["data"]['sources'] = [s.to_dict(sanity) for s in self.sources]
+        return data if not sanity else data["data"]
 
 
     ##################

@@ -17,21 +17,21 @@ from uphill import loggerx
 
 
 def download(
-    target_dir: Pathlike = ".",
+    output_dir: Pathlike = ".",
     force_download: bool = False,
     base_url: str = "http://www.openslr.org/resources/33",
 ) -> Path:
     """
     Downdload and untar the dataset
-    :param target_dir: Pathlike, the path of the dir to storage the dataset.
+    :param output_dir: Pathlike, the path of the dir to storage the dataset.
     :param force_download: Bool, if True, download the tars no matter if the tars exist.
     :param base_url: str, the url of the OpenSLR resources.
     :return: the path to downloaded and extracted directory with data.
     """
-    target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    corpus_dir = target_dir / "aishell"
-    tar_dir = target_dir / "aishell_tar"
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    corpus_dir = output_dir / "aishell"
+    tar_dir = output_dir / "aishell_tar"
     
     dataset_tar_name = "data_aishell.tgz"
     resources_tar_name = "resource_aishell.tgz"
@@ -70,7 +70,7 @@ def download(
 
 def prepare(
     corpus_dir: Pathlike, 
-    target_dir: Optional[Pathlike] = None, 
+    output_dir: Optional[Pathlike] = None,
     num_jobs: int = 1,
     compress: bool = False,
     remove_space: bool = True
@@ -78,14 +78,14 @@ def prepare(
     """
     Returns the manifests which consist of the Utterances and Supervisions
     :param corpus_dir: Pathlike, the path of the data dir.
-    :param target_dir: Pathlike, the path where to write the manifests.
+    :param output_dir: Pathlike, the path where to write the manifests.
     :return: a Dict whose key is the dataset part, and the value is Dicts with the keys 'wav_documents' and 'supervisions'.
     """
     corpus_dir = Path(corpus_dir)
     assert corpus_dir.is_dir(), f"No such directory: {corpus_dir}"
-    if target_dir is not None:
-        target_dir = Path(target_dir)
-        target_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
     transcript_path = corpus_dir / "data_aishell/transcript/aishell_transcript_v0.8.txt"
     da_text_all = TextDocumentArray()
     with open(transcript_path, "r", encoding="utf-8") as f:
@@ -103,7 +103,7 @@ def prepare(
     vocab.insert(0, '<blank>')
     vocab.insert(1, '<unk>')
     vocab.append('<sos/eos>')
-    vocab.to_file(target_dir / "words.txt")
+    vocab.to_file(output_dir / "words.txt")
             
     manifests = defaultdict(dict)
     dataset_parts = ["train", "dev", "test"]
@@ -145,13 +145,13 @@ def prepare(
                         id=idx + f"_sp{speed}"
                     ))
         
-        if target_dir is not None:
+        if output_dir is not None:
             target_extension = ""
             if compress:
                 target_extension = ".gz"
-            sa.to_file(target_dir / f"supervisions_{part}.jsonl{target_extension}")
-            da_wav.to_file(target_dir / f"wav_documents_{part}.jsonl{target_extension}")
-            da_text.to_file(target_dir / f"text_documents_{part}.jsonl{target_extension}")
+            sa.to_file(output_dir / f"supervisions_{part}.jsonl{target_extension}")
+            da_wav.to_file(output_dir / f"wav_documents_{part}.jsonl{target_extension}")
+            da_text.to_file(output_dir / f"text_documents_{part}.jsonl{target_extension}")
         manifests[part] = {
             "wav_documents": da_wav, 
             "text_documents": da_text, 

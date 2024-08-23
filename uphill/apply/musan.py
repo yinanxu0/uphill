@@ -14,21 +14,21 @@ from uphill import loggerx
 
 
 def download(
-    target_dir: Pathlike = ".",
+    output_dir: Pathlike = ".",
     force_download: bool = False,
     base_url: str = "http://www.openslr.org/resources/17",
 ) -> Path:
     """
     Downdload and untar the dataset
-    :param target_dir: Pathlike, the path of the dir to storage the dataset.
+    :param output_dir: Pathlike, the path of the dir to storage the dataset.
     :param force_download: Bool, if True, download the tars no matter if the tars exist.
     :param base_url: str, the url of the OpenSLR resources.
     :return: the path to downloaded and extracted directory with data.
     """
-    target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    corpus_dir = target_dir / "musan"
-    tar_dir = target_dir / "musan_tar"
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    corpus_dir = output_dir / "musan"
+    tar_dir = output_dir / "musan_tar"
     
     dataset_tar_name = "musan.tar.gz"
     dataset_info = {
@@ -41,9 +41,9 @@ def download(
             loggerx.info(f"Skipping download of {tar_name} because completed detector exists.")
             continue
         tar_path = download_url(
-            url=f"{base_url}/{tar_name}", 
-            md5=md5, 
-            target_dir=tar_dir, 
+            url=f"{base_url}/{tar_name}",
+            md5=md5,
+            output_dir=tar_dir,
             force_download=force_download
         )
         shutil.rmtree(corpus_dir, ignore_errors=True)
@@ -54,35 +54,35 @@ def download(
 
 
 def prepare(
-    corpus_dir: Pathlike, 
-    target_dir: Optional[Pathlike] = None, 
+    corpus_dir: Pathlike,
+    output_dir: Optional[Pathlike] = None,
     num_jobs: int = 1,
     compress: bool = False,
 ) -> Dict[str, Dict[str, DocumentArray]]:
     """
     Returns the manifests which consist of the Utterances and Supervisions
     :param corpus_dir: Pathlike, the path of the data dir.
-    :param target_dir: Pathlike, the path where to write the manifests.
+    :param output_dir: Pathlike, the path where to write the manifests.
     :return: a Dict whose key is the dataset part, and the value is Dicts with the keys 'wav_documents' and 'supervisions'.
     """
     corpus_dir = Path(corpus_dir)
     assert corpus_dir.is_dir(), f"No such directory: {corpus_dir}"
-    if target_dir is not None:
-        target_dir = Path(target_dir)
-        target_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
     
     manifests = defaultdict(dict)
     da_wav = DocumentArray.from_dir(corpus_dir, pattern="**/**/*.wav", num_jobs=num_jobs)
     da_noise_wav = da_wav.filter(lambda doc: not doc.id.startswith("speech"))
-    if target_dir is not None:
+    if output_dir is not None:
         target_extension = ""
         if compress:
             target_extension = ".gz"
-        da_wav.to_file(target_dir / f"wav_documents_musan_full.jsonl{target_extension}")
-        da_noise_wav.to_file(target_dir / f"wav_documents_musan_noise.jsonl{target_extension}")
+        da_wav.to_file(output_dir / f"wav_documents_musan_full.jsonl{target_extension}")
+        da_noise_wav.to_file(output_dir / f"wav_documents_musan_noise.jsonl{target_extension}")
         manifests = {
-            "wav_documents": da_wav, 
-            "noise_wav_documents": da_noise_wav, 
+            "wav_documents": da_wav,
+            "noise_wav_documents": da_noise_wav,
         }
     return manifests
 

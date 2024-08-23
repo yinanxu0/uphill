@@ -25,7 +25,7 @@ class SerializableMixin:
             yield r.to_dict()
 
     def to_yaml(self, path: Pathlike) -> None:
-        save_yaml(self.to_dicts(), path)
+        save_yaml(self.to_dict(), path)
 
     @classmethod
     def from_yaml(cls, path: Pathlike) -> Manifest:
@@ -33,7 +33,7 @@ class SerializableMixin:
         return cls.from_dict(data)
     
     def to_json(self, path: Pathlike) -> None:
-        save_json(self.to_dicts(), path)
+        save_json(self.to_dict(), path)
 
     @classmethod
     def from_json(cls, path: Pathlike) -> Manifest:

@@ -52,10 +52,10 @@ class Supervision(AllMixin):
     ### exporting functions ###
     ###########################
     def to_dict(self) -> dict:
-        doc_info = asdict_nonull(self)
-        doc_info['source'] = self.source.to_dict()
-        doc_info["target"] = self.target.to_dict()
-        return doc_info
+        data = asdict_nonull(self)
+        data['source'] = self.source.to_dict()
+        data["target"] = self.target.to_dict()
+        return data
 
 
     ##################

@@ -38,16 +38,9 @@ from uphill.array import (
     SupervisionArray,
 )
 
-
-def get_package_version():
-    import os
-    version_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), "VERSION")
-    version = '0.0.0'
-    for content in open(version_file, 'r', encoding='utf8').readlines():
-        content = content.strip()
-        if len(content) > 0:
-            version = content
-            break
-    return version
+from uphill.version import (
+    get_package_version,
+    check_package_version
+)
 
 __version__ = get_package_version()

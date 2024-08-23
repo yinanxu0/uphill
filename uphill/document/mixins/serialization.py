@@ -22,7 +22,7 @@ class SerializableMixin:
         return cls.from_dict(data)
     
     def to_json(self, path: Pathlike) -> None:
-        save_json(list(self.to_dict()), path)
+        save_json(self.to_dict(), path)
 
     @classmethod
     def from_json(cls, path: Pathlike) -> Manifest:

@@ -9,6 +9,7 @@ import torch
 import torchaudio.compliance.kaldi as kaldi
 
 
+import uphill
 from uphill.core.utils import (
     Channels, Pathlike, Seconds,
     fastcopy,
@@ -21,6 +22,8 @@ from uphill import loggerx
 
 from .mixins import AllMixins
 
+
+_Type = "documentarray"
 
 class DocumentArray(AllMixins):
     doc_header = """
@@ -84,7 +87,7 @@ class DocumentArray(AllMixins):
     
     def __init_subclass__(cls, **kwargs):
         if cls.__name__ not in DocumentArray.NAME_TO_DOCUMENTARRAY:
-            key_name = cls.__name__.lower().replace("documentarray", "")
+            key_name = cls.__name__.lower().replace(_Type, "")
             DocumentArray.NAME_TO_DOCUMENTARRAY[key_name] = cls
             DocumentArray.DOCUMENTARRAY_TO_NAME[cls] = key_name
         super().__init_subclass__(**kwargs)
@@ -187,7 +190,7 @@ class DocumentArray(AllMixins):
         assert len(data) > 0
         if DocumentArray.SAVE_MEMORY:
             assert isinstance(data[0], str), "save memory, should be string"
-            mime_type_name = json.loads(data[0])["__classname__"]
+            mime_type_name = json.loads(data[0])["_classname"]
             DocumentArrayClass = DocumentArray
             if mime_type_name in DocumentArray.NAME_TO_DOCUMENTARRAY:
                 DocumentArrayClass = DocumentArray.NAME_TO_DOCUMENTARRAY[mime_type_name]
@@ -196,8 +199,8 @@ class DocumentArray(AllMixins):
             )
         else:
             assert isinstance(data[0], dict), "should be dictionary"
-            assert data[0]["__classname__"] in DocumentArray.NAME_TO_DOCUMENTARRAY
-            mime_type_name = data[0]["__classname__"]
+            assert data[0]["_classname"] in DocumentArray.NAME_TO_DOCUMENTARRAY
+            mime_type_name = data[0]["_classname"]
             DocumentArrayClass = DocumentArray
             if mime_type_name in DocumentArray.NAME_TO_DOCUMENTARRAY:
                 DocumentArrayClass = DocumentArray.NAME_TO_DOCUMENTARRAY[mime_type_name]
@@ -228,7 +231,7 @@ class DocumentArray(AllMixins):
     ##########################
     def _item_from_dict(self, item: Dict):
         return Document.from_dict(item)
-    
+
     def __eq__(self, other: "DocumentArray") -> bool:
         return self.documents == other.documents
 

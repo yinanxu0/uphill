@@ -1,4 +1,5 @@
 from typing import Any, Union
+import rich
 from rich.tree import Tree
 
 from uphill.core.utils import get_args
@@ -15,8 +16,7 @@ class PlotMixin:
 
         """Print non-empty fields and nested structure of this Document object."""        
         info_tree = self._summary_helper(None, self.__class__.__name__, self)
-        from rich import print
-        print(info_tree)
+        rich.print(info_tree)
     
     def _summary_helper(self, tree: Tree, name: str, obj: Any) -> Tree:
         from uphill import Document, DataSource, Supervision

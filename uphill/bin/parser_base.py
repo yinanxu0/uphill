@@ -21,7 +21,7 @@ def set_base_parser():
             ),
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='MountainTop Line Interface',
+        description='Uphill Line Interface',
     )
 
     parser.add_argument(
@@ -29,7 +29,7 @@ def set_base_parser():
         '--version',
         action='version',
         version=__version__,
-        help='show UpHill version',
+        help='show Uphill version',
     )
 
     return parser

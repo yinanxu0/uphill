@@ -9,22 +9,25 @@ def set_download_parser(parser=None):
     if not parser:
         parser = set_base_parser()
 
-    gp = add_arg_group(parser, 'trainer arguments')
+    gp = add_arg_group(parser, 'download arguments')
     
     gp.add_argument(
+        '-d',
         '--dataset',
         type=str,
         required=True,
         help='dataset name to download')
     
     gp.add_argument(
-        '--target_dir', 
+        '-o',
+        '--output_dir',
         type=str,
         required=True, 
         help='dataset saved dir'
     )
     
     gp.add_argument(
+        '-u',
         '--url',
         default=None,
         type=str,
@@ -32,6 +35,7 @@ def set_download_parser(parser=None):
     )
     
     gp.add_argument(
+        '-f',
         '--force_download',
         action='store_true',
         default=False,
@@ -45,7 +49,7 @@ def run(args, unused_args):
     loggerx.initialize()
     dataset = args.dataset
     kwargs = {
-        "target_dir": args.target_dir,
+        "output_dir": args.output_dir,
         "force_download": args.force_download
     }
     if args.url is not None:

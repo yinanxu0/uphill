@@ -10,15 +10,17 @@ def set_prepare_parser(parser=None):
     if not parser:
         parser = set_base_parser()
 
-    gp = add_arg_group(parser, 'trainer arguments')
+    gp = add_arg_group(parser, 'prepare arguments')
     
     gp.add_argument(
+        '-d',
         '--dataset',
         type=str,
         required=True,
         help='dataset name to download')
     
     gp.add_argument(
+        '-c',
         '--corpus_dir', 
         type=str,
         required=True, 
@@ -26,19 +28,22 @@ def set_prepare_parser(parser=None):
     )
     
     gp.add_argument(
-        '--target_dir', 
+        '-o',
+        '--output_dir',
         type=str,
         required=True, 
         help='dir to save all documents'
     )
     
     gp.add_argument(
-        '--num_jobs', 
+        '-j',
+        '--num_jobs',
         type=int,
         help='number of jobs to process data'
     )
     
     gp.add_argument(
+        '-z',
         '--compress',
         action='store_true',
         default=False,
@@ -53,7 +58,7 @@ def run(args, unused_args):
     dataset = args.dataset
     kwargs = {
         "corpus_dir": args.corpus_dir,
-        "target_dir": args.target_dir,
+        "output_dir": args.output_dir,
         "compress": args.compress
     }
     if args.num_jobs:
