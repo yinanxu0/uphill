@@ -222,7 +222,7 @@ class DataSource(AllMixin):
 @dataclass(repr=False, eq=False)
 class AudioDataSource(DataSource):
     
-    sampling_rate: int = None
+    sample_rate: int = None
     num_channels: List[int] = field(default_factory=list)
     
     def __post_init__(self):
@@ -254,7 +254,7 @@ class AudioDataSource(DataSource):
         if isinstance(self._tensor, np.ndarray):
             tensor = torch.from_numpy(self._tensor)
         torchaudio.save(
-            stream, tensor, self.sampling_rate, format=format, bits_per_sample=16
+            stream, tensor, self.sample_rate, format=format, bits_per_sample=16
         )
         self._blob = stream.getvalue()
     
@@ -285,8 +285,7 @@ class AudioDataSource(DataSource):
         Returns numpy array with shapes: (n_samples,) for single-channel,
         (n_channels, n_samples) for multi-channel.
 
-        Note: The elements in the returned array are in the range [-1.0, 1.0]
-        and are of dtype `np.float32`.
+        Note: The elements in the returned array are in the range [-1.0, 1.0].
         """
         if urllib.parse.urlparse(str(self.uri)) in ['data', 'http', 'https']:
             if offset != 0.0 or duration is not None:
@@ -297,11 +296,11 @@ class AudioDataSource(DataSource):
                 )
             with SmartOpen.open(self.uri, "rb") as f:
                 source = BytesIO(f.read())
-                samples, sampling_rate = read_audio(
+                samples, sample_rate = read_audio(
                     source, offset=offset, duration=duration
                 )
         else:
-            samples, sampling_rate = read_audio(
+            samples, sample_rate = read_audio(
                 self.uri,
                 offset=offset,
                 duration=duration,
@@ -312,7 +311,7 @@ class AudioDataSource(DataSource):
             num_samples = (
                 samples.shape[0] if len(samples.shape) == 1 else samples.shape[1]
             )
-            available_duration = num_samples / sampling_rate
+            available_duration = num_samples / sample_rate
             if (
                 available_duration < duration - 0.025
             ):  # set the allowance as 1ms to avoid float error
@@ -324,7 +323,7 @@ class AudioDataSource(DataSource):
             self.num_channels = [0]
         else:
             self.num_channels = list(range(samples.shape[0]))
-        return samples.astype(np.float32)
+        return samples
     
     def load_blob_to_tensor(
         self, 
@@ -332,7 +331,7 @@ class AudioDataSource(DataSource):
         duration: Optional[float] = None
     ) -> ArrayType:
         source = BytesIO(self._blob)
-        samples, sampling_rate = read_audio(
+        samples, sample_rate = read_audio(
             source, offset=offset, duration=duration
         )
         # explicit sanity check for duration as soundfile does not complain here
@@ -340,7 +339,7 @@ class AudioDataSource(DataSource):
             num_samples = (
                 samples.shape[0] if len(samples.shape) == 1 else samples.shape[1]
             )
-            available_duration = num_samples / sampling_rate
+            available_duration = num_samples / sample_rate
             if (
                 available_duration < duration - 0.025
             ):  # set the allowance as 1ms to avoid float error
@@ -351,7 +350,7 @@ class AudioDataSource(DataSource):
             self.num_channels = [0]
         else:
             self.num_channels = list(range(samples.shape[0]))
-        return samples.astype(np.float32)
+        return samples
 
 
 @dataclass(repr=False, eq=False)
@@ -419,7 +418,7 @@ class TextDataSource(DataSource):
         """
         tokens = tokenizer.tokenize(self.text)
         tensor = [vocab[token] if vocab[token] > 0 else 0 for token in tokens]
-        return np.array(tensor, dtype=dtype)
+        return torch.tensor(tensor, dtype=dtype)
 
     def convert_tensor_to_text(
         self, tokenizer: Tokenizer, vocab: Vocabulary, 
@@ -505,15 +504,16 @@ class AlignmentDataSource(DataSource):
             duration=self.duration
         )
 
-    def perturb_speed(self, factor: float, sampling_rate: int) -> "AlignmentDataSource":
+    def perturb_speed(self, factor: float, offset: Seconds=0.0) -> "AlignmentDataSource":
         """
         Return an ``AlignmentDataSource`` that has time boundaries matching the
         recording/cut perturbed with the same factor.
         """
-        start_sample = compute_num_samples(self.start, sampling_rate)
-        num_samples = compute_num_samples(self.duration, sampling_rate)
-        new_start = round(perturb_num_samples(start_sample, factor) / sampling_rate, ndigits=8)
-        new_duration = round(perturb_num_samples(num_samples, factor) / sampling_rate, ndigits=8)
+        sample_rate = 16000
+        start_sample = compute_num_samples(self.start-offset, sample_rate)
+        num_samples = compute_num_samples(self.duration, sample_rate)
+        new_start = round(perturb_num_samples(start_sample, factor) / sample_rate + offset, ndigits=8)
+        new_duration = round(perturb_num_samples(num_samples, factor) / sample_rate, ndigits=8)
         return AlignmentDataSource(
             symbol=self.symbol, 
             start=new_start, 

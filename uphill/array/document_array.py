@@ -11,7 +11,7 @@ import torchaudio.compliance.kaldi as kaldi
 
 import uphill
 from uphill.core.utils import (
-    Channels, Pathlike, Seconds,
+    ArrayType, Channels, Pathlike, Seconds,
     fastcopy,
     parallel_for
 )
@@ -306,8 +306,8 @@ class AudioDocumentArray(DocumentArray):
     def num_channels(self, document_id: str) -> int:
         return self.documents[document_id].num_channels
 
-    def sampling_rate(self, document_id: str) -> int:
-        return self.documents[document_id].sampling_rate
+    def sample_rate(self, document_id: str) -> int:
+        return self.documents[document_id].sample_rate
 
     def num_samples(self, document_id: str) -> int:
         return self.documents[document_id].num_samples
@@ -321,7 +321,7 @@ class AudioDocumentArray(DocumentArray):
         channels: Optional[Channels] = None,
         offset_seconds: float = 0.0,
         duration_seconds: Optional[float] = None,
-    ) -> np.ndarray:
+    ) -> ArrayType:
         return self.documents[document_id].load_audio(
             channels=channels, offset=offset_seconds, duration=duration_seconds
         )
@@ -366,13 +366,13 @@ class AudioDocumentArray(DocumentArray):
         """
         return fastcopy(self, documents=(r.perturb_volume(factor=factor, affix_id=affix_id) for r in self))
 
-    def resample(self, sampling_rate: int, affix_id: bool = True) -> "AudioDocumentArray":
+    def resample(self, sample_rate: int, affix_id: bool = True) -> "AudioDocumentArray":
         """
         Apply resampling to all documents in the ``AudioDocumentArray`` and return a new ``AudioDocumentArray``.
-        :param sampling_rate: The new sampling rate.
+        :param sample_rate: The new sampling rate.
         :return: a new ``AudioDocumentArray`` with lazily resampled ``AudioDocument`` objects.
         """
-        return fastcopy(self, documents=(r.resample(sampling_rate, affix_id=affix_id) for r in self))
+        return fastcopy(self, documents=(r.resample(sample_rate, affix_id=affix_id) for r in self))
 
     def compute_cmvn(self, feat_dim: int=80, num_jobs: int=16) -> Dict:
         mean_stats = torch.zeros(feat_dim)
@@ -381,21 +381,21 @@ class AudioDocumentArray(DocumentArray):
         
         def _feature_fn(document_id):
             waveform = self.load_audio(document_id=document_id)
-            sampling_rate = self.sampling_rate(document_id=document_id)
+            sample_rate = self.sample_rate(document_id=document_id)
             
             waveform = waveform * (1 << 15)
             if len(waveform.shape) == 1:
                 length = waveform.shape[0]
             else:
                 length = waveform.shape[1]
-            if length < 0.025 * sampling_rate:
+            if length < 0.025 * sample_rate:
                 loggerx.warning(f"Document(id={document_id}) too short, only {length} samples")
                 return None
             featform = kaldi.fbank(torch.Tensor(waveform),
                               num_mel_bins=feat_dim,
                               dither=0.0,
                               energy_floor=0.0,
-                              sample_frequency=sampling_rate)
+                              sample_frequency=sample_rate)
             return featform
         
         for featform in parallel_for(
@@ -457,7 +457,7 @@ class AlignmentDocumentArray(DocumentArray):
         document_id: str,
         window_size: float=0.01, 
         hop_size: float=0.025
-    ) -> np.ndarray:
+    ) -> ArrayType:
         return self.documents[document_id].load_tensor(
             window_size=window_size, hop_size=hop_size
         )
@@ -466,7 +466,7 @@ class AlignmentDocumentArray(DocumentArray):
     ###############################
     ### augmentation operations ###
     ###############################
-    def perturb_speed(self, factor: float, sampling_rate: int, affix_id: bool = True) -> "AlignmentDocumentArray":
+    def perturb_speed(self, factor: float, sample_rate: int, affix_id: bool = True) -> "AlignmentDocumentArray":
         """
         Return a new ``AlignmentDocument`` that will lazily perturb the speed while loading audio.
         The ``num_samples`` and ``duration`` fields are updated to reflect the

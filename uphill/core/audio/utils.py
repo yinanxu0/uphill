@@ -59,7 +59,7 @@ def perturb_num_samples(num_samples: int, factor: float) -> int:
 
 
 def compute_num_samples(
-    duration: Seconds, sampling_rate: int, rounding=ROUND_HALF_UP
+    duration: Seconds, sample_rate: int, rounding=ROUND_HALF_UP
 ) -> int:
     """
     Convert a time quantity to the number of samples given a specific sampling rate.
@@ -67,7 +67,7 @@ def compute_num_samples(
     the sampling interval (unlike Python's built-in ``round()`` that implements banker's rounding).
     """
     return int(
-        Decimal(round(duration * sampling_rate, ndigits=8)).quantize(
+        Decimal(round(duration * sample_rate, ndigits=8)).quantize(
             0, rounding=rounding
         )
     )
@@ -145,16 +145,16 @@ def compute_start_duration_for_extended_cut(
     return round(new_start, ndigits=15), new_duration
 
 
-def add_durations(*durations: Seconds, sampling_rate: int) -> Seconds:
+def add_durations(*durations: Seconds, sample_rate: int) -> Seconds:
     """
     Adds two durations in a way that avoids floating point precision issues.
     The durations in seconds are first converted to audio sample counts,
     then added, and finally converted back to floating point seconds.
     """
     tot_num_samples = sum(
-        compute_num_samples(d, sampling_rate=sampling_rate) for d in durations
+        compute_num_samples(d, sample_rate=sample_rate) for d in durations
     )
-    return tot_num_samples / sampling_rate
+    return tot_num_samples / sample_rate
 
 
 def exactly_one_not_null(*args) -> bool:

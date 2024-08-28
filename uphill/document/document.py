@@ -1,6 +1,6 @@
 import os
 from typing_extensions import Literal
-import numpy as np
+import torch
 from pathlib import Path
 from decimal import ROUND_HALF_UP
 from dataclasses import dataclass, field
@@ -262,21 +262,21 @@ class Document(AllMixin):
 class AudioDocument(Document):
     ## for Audio document
     num_channels: List[int] = field(default_factory=list)
-    sampling_rate: int = None
+    sample_rate: int = None
     num_samples: int = None
     start: float = 0.0
     duration: float = None
     
     def __post_init__(self):
         super().__post_init__()
-        if self.sampling_rate is not None or self.num_samples is not None:
+        if self.sample_rate is not None or self.num_samples is not None:
             return
         uri = self.sources[0].uri
         if not os.path.exists(uri):
             loggerx.warning(f"Uri not exist: {uri}")
             return
         audio_info = torchaudio_info(uri)
-        self.sampling_rate = audio_info.samplerate
+        self.sample_rate = audio_info.samplerate
         self.num_channels = list(range(audio_info.channels))
         
         if self.start > 0.0 or self.duration is not None:
@@ -287,7 +287,7 @@ class AudioDocument(Document):
                 self.duration = min(self.duration, audio_info.duration)
             self.num_samples = compute_num_samples(
                 duration=self.duration,
-                sampling_rate=self.sampling_rate,
+                sample_rate=self.sample_rate,
             )
         else:
             # copied from audio file
@@ -302,7 +302,7 @@ class AudioDocument(Document):
         channels: Optional[Channels] = None,
         offset: float = 0.0,
         duration: Optional[float] = None,
-    ) -> np.ndarray:
+    ) -> ArrayType:
         """
         Read the audio samples from the underlying audio source (path, URL, unix pipe/command).
 
@@ -348,7 +348,7 @@ class AudioDocument(Document):
             offset_aug, duration_aug = tfn.reverse_timestamps(
                 offset=offset_aug,
                 duration=duration_aug,
-                sampling_rate=self.sampling_rate,
+                sample_rate=self.sample_rate,
             )
 
         samples_per_source = []
@@ -363,11 +363,11 @@ class AudioDocument(Document):
 
             # Case: two-channel audio file but only one channel requested
             #       it might not be optimal to load all channels, but IDK if there's anything we can do about it
-            channels_to_remove = [
-                idx for idx, cid in enumerate(source.num_channels) if cid not in channels
+            channels_to_keep = [
+                idx for idx, cid in enumerate(source.num_channels) if cid in channels
             ]
-            if channels_to_remove:
-                samples = np.delete(samples, channels_to_remove, axis=0)
+            if len(channels_to_keep) < samples.shape[0]:
+                samples = samples[channels_to_keep]
             samples_per_source.append(samples)
 
         # Stack all the samples from all the sources into a single array.
@@ -375,7 +375,7 @@ class AudioDocument(Document):
 
         # We'll apply the transforms now (if any).
         for tfn in transforms:
-            audio = tfn(audio, self.sampling_rate)
+            audio = tfn(audio, self.sample_rate)
 
         # Transformation chains can introduce small mismatches in the number of samples:
         # we'll fix them here, or raise an error if they exceeded a tolerance threshold.
@@ -401,7 +401,7 @@ class AudioDocument(Document):
         transforms = self.transforms.copy() if self.transforms is not None else []
         transforms.append(Speed(factor=factor).to_dict())
         num_samples_after_perturb = perturb_num_samples(self.num_samples, factor)
-        duration_after_perturb = num_samples_after_perturb / self.sampling_rate
+        duration_after_perturb = num_samples_after_perturb / self.sample_rate
         
         return fastcopy(
             self,
@@ -427,7 +427,7 @@ class AudioDocument(Document):
         transforms = self.transforms.copy() if self.transforms is not None else []
         transforms.append(Tempo(factor=factor).to_dict())
         num_samples_after_perturb = perturb_num_samples(self.num_samples, factor)
-        duration_after_perturb = num_samples_after_perturb / self.sampling_rate
+        duration_after_perturb = num_samples_after_perturb / self.sample_rate
         return fastcopy(
             self,
             id=f"{self.id}_tp{factor}" if affix_id else self.id,
@@ -454,13 +454,13 @@ class AudioDocument(Document):
             transforms=transforms,
         )
 
-    def resample(self, sampling_rate: int, affix_id: bool = True) -> "AudioDocument":
+    def resample(self, sample_rate: int, affix_id: bool = True) -> "AudioDocument":
         """
         Return a new ``AudioDocument`` that will be lazily resampled while loading audio.
-        :param sampling_rate: The new sampling rate.
+        :param sample_rate: The new sampling rate.
         :return: A resampled ``AudioDocument``.
         """
-        if sampling_rate == self.sampling_rate:
+        if sample_rate == self.sample_rate:
             return fastcopy(self)
 
         transforms = self.transforms.copy() if self.transforms is not None else []
@@ -476,35 +476,35 @@ class AudioDocument(Document):
         '''
         transforms.append(
             Resample(
-                source_sampling_rate=self.sampling_rate,
-                target_sampling_rate=sampling_rate,
+                source_sample_rate=self.sample_rate,
+                target_sample_rate=sample_rate,
             ).to_dict()
         )
 
         num_samples_after_resample = compute_num_samples(
-            self.duration, sampling_rate, rounding=ROUND_HALF_UP
+            self.duration, sample_rate, rounding=ROUND_HALF_UP
         )
         # Duration might need an adjustment when doing a non-trivial resampling
         # (e.g. 16000 -> 22050), where the resulting number of samples cannot
         # correspond to old duration exactly.
-        duration_after_resample = num_samples_after_resample / sampling_rate
+        duration_after_resample = num_samples_after_resample / sample_rate
         return fastcopy(
             self,
-            id=f"{self.id}_rs{sampling_rate}" if affix_id else self.id,
+            id=f"{self.id}_rs{sample_rate}" if affix_id else self.id,
             transforms=transforms,
-            sampling_rate=sampling_rate,
+            sample_rate=sample_rate,
             num_samples=num_samples_after_resample,
             duration=duration_after_resample,
         )
 
-    def _stack_audio_channels(self, samples_per_source: List[np.ndarray]) -> np.ndarray:
+    def _stack_audio_channels(self, samples_per_source: List[ArrayType]) -> ArrayType:
         # There may be a mismatch in the number of samples between different channels. We
         # check if the mismatch is within a reasonable tolerance and if so, we pad
         # all channels to the length of the longest one.
         allowed_diff = int(
             compute_num_samples(
                 0.025,
-                sampling_rate=self.sampling_rate,
+                sample_rate=self.sample_rate,
             )
         )
         if len(samples_per_source) > 1:
@@ -515,17 +515,18 @@ class AudioDocument(Document):
             max_samples = max(s.shape[1] for s in samples_per_source)
             for s in samples_per_source:
                 if max_samples - s.shape[1] <= allowed_diff:
-                    s = np.pad(s, ((0, 0), (0, max_samples - s.shape[1])), "constant")
+                    # s = np.pad(s, ((0, 0), (0, max_samples - s.shape[1])), "constant")
+                    s = torch.nn.functional.pad(s, ((0, max_samples - s.shape[1])), "constant", 0)
                 else:
                     raise ValueError(
                         f"The mismatch between the number of samples in the "
                         f"different channels of the utterance {self.id} is "
                         f"greater than the allowed tolerance {0.025}."
                     )
-            audio = np.concatenate(samples_per_source, axis=0)
+            audio = torch.cat(samples_per_source, axis=0)
         else:
             # shape: (n_channels, n_samples)
-            audio = np.vstack(samples_per_source)
+            audio = torch.vstack(samples_per_source)
         return audio
 
 
@@ -551,47 +552,63 @@ class ImageDocument(Document):
 @dataclass(repr=False, eq=False)
 class AlignmentDocument(Document):
     # sources: List[DataSource]
+    start: float = None
+    duration: float = None
+
+    def __post_init__(self):
+        # round start and duration
+        self.start = round(self.start, ndigits=8)
+        self.duration = round(self.duration, ndigits=8)
     
     @staticmethod
     def from_segments(
-        segments: Iterable[Tuple[Union[str, int], float, float]],
+        segments: Iterable[Dict[str, Union[str, float]]],
         id: Optional[Union[str, Callable[[Path], str]]] = None,
     ) -> "AlignmentDocument":
         assert check_argument_types()
+        for idx, segment in enumerate(segments):
+            assert "symbol" in segment, f"segment[{idx}] miss `symbol` element"
+            assert "start" in segment, f"segment[{idx}] miss `start` element"
+            assert "duration" in segment, f"segment[{idx}] miss `duration` element"
+
+        # update duration
+        start = min([segment["start"] for segment in segments])
+        end = max([segment["duration"]+segment["start"] for segment in segments])
+
         document = AlignmentDocument(
             sources=[ 
-                AlignmentDataSource(symbol=segment[0], start=segment[1], duration=segment[2]) 
-                for segment in segments
-            ]
+                AlignmentDataSource(**segment) for segment in segments
+            ],
+            start=start,
+            duration=end-start,
         )
         if id is not None:
             document.id = str(id)
         return document
 
+    @property
+    def end(self) -> Seconds:
+        return round(self.start + self.duration, ndigits=8)
 
     def load_tensor(self, window_size: float=0.025, frame_shift: float=0.01) -> ArrayType:
         labels = []
-        absolute_start = None
         for idx, source in enumerate(self.sources):
             exist_num_labels = len(labels)
-            segment_start, segment_end = source.start, source.end
-            if idx == 0:
-                ## first segment to get the absolute start of whole segment
-                absolute_start = segment_start
+            source_end = source.end
             total_num_labels_til_now = compute_num_windows(
-                duration = segment_end - absolute_start,
+                duration = source_end - self.start,
                 window_size = window_size,
                 frame_shift = frame_shift
             )
             current_num_labels = total_num_labels_til_now - exist_num_labels
             labels.extend([source.symbol] * current_num_labels)
-        return np.array(labels, dtype=np.int32)
+        return torch.tensor(labels, dtype=torch.int32)
 
 
     ###############################
     ### augmentation operations ###
     ###############################
-    def perturb_speed(self, factor: float, sampling_rate: int, affix_id: bool = True) -> "AlignmentDocument":
+    def perturb_speed(self, factor: float, affix_id: bool = True) -> "AlignmentDocument":
         """
         Return a new ``AlignmentDocument`` that will lazily perturb the speed while loading audio.
         The ``num_samples`` and ``duration`` fields are updated to reflect the
@@ -602,24 +619,30 @@ class AlignmentDocument(Document):
             by affixing it with "_length{factor}_dim{dim}".
         :return: a modified copy of the current ``AlignmentDocument``.
         """
+        sample_rate = 16000
+        num_samples = compute_num_samples(self.duration, sample_rate)
+        new_duration = round(perturb_num_samples(num_samples, factor) / sample_rate, ndigits=8)
         return fastcopy(
             self,
             id = f"{self.id}_length{factor}" if affix_id else self.id,
             sources=[
-                source.perturb_speed(factor=factor, sampling_rate=sampling_rate)
+                source.perturb_speed(factor=factor, offset=self.start)
                 for source in self.sources
-            ]
+            ],
+            duration=new_duration,
         )
     
     def with_offset(self, offset: Seconds, affix_id: bool = True) -> "AlignmentDocument":
         """Return an identical ``AlignmentDocument``, but with the ``offset`` added to each source."""
+        assert offset >= -self.start, f"document's start={self.start}, offset must be >= {-self.start}"
         return fastcopy(
             self,
             id = f"{self.id}_offset{offset}" if affix_id else self.id,
             sources=[
                 source.with_offset(offset=offset)
                 for source in self.sources
-            ]
+            ],
+            start=self.start+offset
         )
 
     def trim(self, end: Seconds, start: Seconds = 0, affix_id: bool = True) -> "AlignmentDocument":
@@ -634,10 +657,14 @@ class AlignmentDocument(Document):
             if trim_source is None:
                 continue
             sources.append(trim_source)
+        start = max(start, self.start)
+        duration = min(end-start, self.duration)
         return fastcopy(
             self,
             id = f"{self.id}_trim{end}" if affix_id else self.id,
-            sources=sources
+            sources=sources,
+            start=start,
+            duration=duration,
         )
 
     def transform(self, transform_fn: Callable[[str], str], affix_id: bool = True) -> "AlignmentDocument":

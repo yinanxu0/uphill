@@ -1,5 +1,6 @@
 from typing import Optional, Tuple, Union, Any, NamedTuple
 import functools
+import torch
 import torchaudio
 import numpy as np
 import re
@@ -10,7 +11,7 @@ from subprocess import PIPE, run
 
 
 from uphill.core.utils import (
-    Pathlike, Channels, Seconds, Decibels,
+    ArrayType, Pathlike, Channels, Seconds, Decibels,
     SmartOpen
 )
 from uphill.errors import AudioLoadingError
@@ -21,7 +22,7 @@ def read_audio(
     path_or_fd: Union[Pathlike, Any],
     offset: float = 0.0,
     duration: Optional[float] = None,
-) -> Tuple[np.ndarray, int]:
+) -> Tuple[ArrayType, int]:
     # First handle special cases: OPUS and SPHERE (SPHERE may be encoded with shorten,
     #   which can only be decoded by binaries "shorten" and "sph2pipe").
     ## TODO: read bytes audio data
@@ -40,7 +41,7 @@ def read_audio(
 
 def torchaudio_load(
     path: Union[Pathlike, Any], offset: float = 0.0, duration: Optional[float] = None
-) -> Tuple[np.ndarray, int]:
+) -> Tuple[ArrayType, int]:
     # Need to grab the "info" about sampling rate before reading to compute
     # the number of samples provided in offset / num_frames.
     audio_info = torchaudio_info(path)
@@ -54,12 +55,12 @@ def torchaudio_load(
         # Set seek pointer to the beginning of the file as torchaudio.info
         # might have left it at the end of the header
         path.seek(0)
-    audio, sampling_rate = torchaudio.load(
+    audio, sample_rate = torchaudio.load(
         path,
         frame_offset=frame_offset,
         num_frames=num_frames,
     )
-    return audio.numpy(), sampling_rate
+    return audio, sample_rate
 
 
 def read_opus(
@@ -86,8 +87,8 @@ def read_opus_ffmpeg(
     path: Pathlike,
     offset: Seconds = 0.0,
     duration: Optional[Seconds] = None,
-    force_opus_sampling_rate: Optional[int] = None,
-) -> Tuple[np.ndarray, int]:
+    force_opus_sample_rate: Optional[int] = None,
+) -> Tuple[ArrayType, int]:
     """
     Reads OPUS files using ffmpeg in a shell subprocess.
     Unlike audioread, correctly supports offsets and durations for reading short chunks.
@@ -97,7 +98,7 @@ def read_opus_ffmpeg(
     """
     # Construct the ffmpeg command depending on the arguments passed.
     cmd = "ffmpeg -threads 1"
-    sampling_rate = 48000
+    sample_rate = 48000
     # Note: we have to add offset and duration options (-ss and -t) BEFORE specifying the input
     #       (-i), otherwise ffmpeg will decode everything and trim afterwards...
     if offset > 0:
@@ -107,9 +108,9 @@ def read_opus_ffmpeg(
     # Add the input specifier after offset and duration.
     cmd += f" -i {path}"
     # Optionally resample the output.
-    if force_opus_sampling_rate is not None:
-        cmd += f" -ar {force_opus_sampling_rate}"
-        sampling_rate = force_opus_sampling_rate
+    if force_opus_sample_rate is not None:
+        cmd += f" -ar {force_opus_sample_rate}"
+        sample_rate = force_opus_sample_rate
     # Read audio samples directly as float32.
     cmd += " -f f32le -threads 1 pipe:1"
     # Actual audio reading.
@@ -134,7 +135,7 @@ def read_opus_ffmpeg(
         raise AudioLoadingError(
             f"{e}\nThe ffmpeg command for which the program failed is: '{cmd}', error code: {proc.returncode}"
         )
-    return audio, sampling_rate
+    return audio, sample_rate
 
 
 def parse_channel_from_ffmpeg_output(ffmpeg_stderr: bytes) -> str:
@@ -216,15 +217,15 @@ def torchaudio_info(path: Pathlike) -> AudioInfo:
 def urlaudio_info(url: Pathlike) -> AudioInfo:
     with SmartOpen.open(url, "rb") as f:
         source = BytesIO(f.read())
-        samples, sampling_rate = read_audio(source)
+        samples, sample_rate = read_audio(source)
     num_samples = (
         samples.shape[0] if len(samples.shape) == 1 else samples.shape[1]
     )
-    duration = num_samples / sampling_rate
+    duration = num_samples / sample_rate
     return AudioInfo(
         channels=1,
         frames=num_samples,
-        samplerate=sampling_rate,
+        samplerate=sample_rate,
         duration=duration
     )
     

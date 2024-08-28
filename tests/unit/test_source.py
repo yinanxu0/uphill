@@ -68,10 +68,10 @@ def test_construct_datasource_from_blob(uri):
     ]
 )
 def test_construct_datasource_from_tensor(uri):
-    tensor, sampling_rate = torchaudio.load(uri)
+    tensor, sample_rate = torchaudio.load(uri)
     uri_path = Path(uri)
     uid = uri_path.stem
-    ds = DataSource.from_tensor(id=uid, tensor=tensor, sampling_rate=sampling_rate, mime_type="audio")
+    ds = DataSource.from_tensor(id=uid, tensor=tensor, sample_rate=sample_rate, mime_type="audio")
     assert ds.id == uid
     ds.load_blob()
     assert len(ds.blob) == BLOB_LENGTH[uid]

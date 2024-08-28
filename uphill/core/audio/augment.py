@@ -7,7 +7,8 @@ import torchaudio
 from decimal import ROUND_HALF_UP
 
 
-from uphill.core.utils import Seconds
+from uphill import loggerx
+from uphill.core.utils import ArrayType, Seconds
 from .utils import (
     compute_num_samples, perturb_num_samples
 )
@@ -21,14 +22,14 @@ class AudioAugment:
     a numpy array of samples, and a sampling rate. E.g.:
 
         >>> fn = AudioAugment.from_dict(...)
-        >>> new_audio = fn(audio, sampling_rate)
+        >>> new_audio = fn(audio, sample_rate)
 
     Since we often use cuts of the original recording, they will refer to the timestamps
     of the augmented audio (which might be speed perturbed and of different duration).
     Each transform provides a helper method to recover the original audio timestamps:
 
         >>> # When fn does speed perturbation:
-        >>> fn.reverse_timestamps(offset=5.055555, duration=10.1111111, sampling_rate=16000)
+        >>> fn.reverse_timestamps(offset=5.055555, duration=10.1111111, sample_rate=16000)
         ... (5.0, 10.0)
 
     Furthermore, ``AudioAugment`` can be easily (de)serialized to/from dict
@@ -62,7 +63,7 @@ class AudioAugment:
         ), f"Unknown transform type: {data['name']}"
         return AudioAugment.NAME_TO_TRANSFORM[data["name"]](**data["kwargs"])
 
-    def __call__(self, samples: np.ndarray, sampling_rate: int) -> np.ndarray:
+    def __call__(self, samples: ArrayType, sample_rate: int) -> ArrayType:
         """
         Apply transform.
 
@@ -71,7 +72,7 @@ class AudioAugment:
         raise NotImplementedError
 
     def reverse_timestamps(
-        self, offset: Seconds, duration: Optional[Seconds], sampling_rate: int
+        self, offset: Seconds, duration: Optional[Seconds], sample_rate: int
     ) -> Tuple[Seconds, Optional[Seconds]]:
         """
         Convert ``offset`` and ``duration`` timestamps to be adequate for the audio before the transform.
@@ -96,19 +97,21 @@ class Speed(AudioAugment):
     def __post_init__(self):
         self._precompiled_resamplers: Dict[Tuple[int, int], torch.nn.Module] = {}
     
-    def __call__(self, samples: np.ndarray, sampling_rate: int) -> np.ndarray:
-        ## TODO: round(sampling_rate * self.factor) -> sampling_rate ???
-        resampler_key = (round(sampling_rate * self.factor), sampling_rate)
+    def __call__(self, samples: ArrayType, sample_rate: int) -> ArrayType:
+        ## TODO: round(sample_rate * self.factor) -> sample_rate ???
+        if isinstance(samples, np.ndarray):
+            samples = torch.from_numpy(samples)
+        resampler_key = (round(sample_rate * self.factor), sample_rate)
         if resampler_key not in self._precompiled_resamplers:
             self._precompiled_resamplers[resampler_key] = torchaudio.transforms.Resample(
                 *resampler_key
             )
         resampler = self._precompiled_resamplers[resampler_key]
-        augmented = resampler(torch.from_numpy(samples))
-        return augmented.numpy()
+        augmented = resampler(samples)
+        return augmented
 
     def reverse_timestamps(
-        self, offset: Seconds, duration: Optional[Seconds], sampling_rate: int
+        self, offset: Seconds, duration: Optional[Seconds], sample_rate: int
     ) -> Tuple[Seconds, Optional[Seconds]]:
         """
         This method helps estimate the original offset and duration for a recording
@@ -116,9 +119,9 @@ class Speed(AudioAugment):
         We need this estimate to know how much audio to actually load from disk during the
         call to ``load_audio()``.
         """
-        start_sample = compute_num_samples(offset, sampling_rate)
+        start_sample = compute_num_samples(offset, sample_rate)
         num_samples = (
-            compute_num_samples(duration, sampling_rate)
+            compute_num_samples(duration, sample_rate)
             if duration is not None
             else None
         )
@@ -129,8 +132,8 @@ class Speed(AudioAugment):
             else None
         )
         return (
-            start_sample / sampling_rate,
-            num_samples / sampling_rate if num_samples is not None else None,
+            start_sample / sample_rate,
+            num_samples / sample_rate if num_samples is not None else None,
         )
 
 
@@ -140,27 +143,26 @@ class Resample(AudioAugment):
     Resampling effect, the same one as invoked with `sox rate` in the command line.
     """
 
-    source_sampling_rate: int
-    target_sampling_rate: int
+    source_sample_rate: int
+    target_sample_rate: int
 
     def __post_init__(self):
-        self.source_sampling_rate = int(self.source_sampling_rate)
-        self.target_sampling_rate = int(self.target_sampling_rate)
+        self.source_sample_rate = int(self.source_sample_rate)
+        self.target_sample_rate = int(self.target_sample_rate)
         self.resampler = torchaudio.transforms.Resample(
-            self.source_sampling_rate, self.target_sampling_rate
+            self.source_sample_rate, self.target_sample_rate
         )
 
-    def __call__(self, samples: np.ndarray, *args, **kwargs) -> np.ndarray:
-        if self.source_sampling_rate == self.target_sampling_rate:
+    def __call__(self, samples: ArrayType, *args, **kwargs) -> ArrayType:
+        if self.source_sample_rate == self.target_sample_rate:
             return samples
-
         if isinstance(samples, np.ndarray):
             samples = torch.from_numpy(samples)
         augmented = self.resampler(samples)
-        return augmented.numpy()
+        return augmented
 
     def reverse_timestamps(
-        self, offset: Seconds, duration: Optional[Seconds], sampling_rate: int
+        self, offset: Seconds, duration: Optional[Seconds], sample_rate: int
     ) -> Tuple[Seconds, Optional[Seconds]]:
         """
         This method helps estimate the original offset and duration for a recording
@@ -174,23 +176,24 @@ class Resample(AudioAugment):
         E.g. 16kHz, 235636 samples correspond to 14.72725s duration; after resampling to 22.05kHz,
         it is 324736 samples which correspond to 14.727256235827664s duration.
         """
-        if self.source_sampling_rate == self.target_sampling_rate:
+        if self.source_sample_rate == self.target_sample_rate:
             return offset, duration
 
         old_num_samples = compute_num_samples(
-            offset, self.source_sampling_rate, rounding=ROUND_HALF_UP
+            offset, self.source_sample_rate, rounding=ROUND_HALF_UP
         )
-        old_offset = old_num_samples / self.source_sampling_rate
+        old_offset = old_num_samples / self.source_sample_rate
         if duration is not None:
             old_num_samples = compute_num_samples(
-                duration, self.source_sampling_rate, rounding=ROUND_HALF_UP
+                duration, self.source_sample_rate, rounding=ROUND_HALF_UP
             )
-            old_duration = old_num_samples / self.source_sampling_rate
+            old_duration = old_num_samples / self.source_sample_rate
         else:
             old_duration = None
         return old_offset, old_duration
 
 
+# TODO: change function to torchaudio
 @dataclass
 class Tempo(AudioAugment):
     """Tempo perturbation effect, the same one as invoked with `sox tempo` in the command line.
@@ -202,19 +205,25 @@ class Tempo(AudioAugment):
 
     factor: float
 
-    def __call__(self, samples: np.ndarray, sampling_rate: int) -> np.ndarray:
+    def __call__(self, samples: ArrayType, sample_rate: int) -> ArrayType:
         if isinstance(samples, np.ndarray):
             samples = torch.from_numpy(samples)
-        augmented, _ = torchaudio.sox_effects.apply_effects_tensor(
-            samples, sampling_rate, [["tempo", str(self.factor)]]
-        )
-        return augmented.numpy()
+        try:
+            augmented, _ = torchaudio.sox_effects.apply_effects_tensor(
+                samples, sample_rate, [["tempo", str(self.factor)]]
+            )
+        except Exception:
+            raise RuntimeError(
+                "You are using Tempo Transform, maybe not availabe on your platform. "
+                "Would be solved in the future."
+            )
+        return augmented
 
     def reverse_timestamps(
         self,
         offset: Seconds,
         duration: Optional[Seconds],
-        sampling_rate: int,
+        sample_rate: int,
     ) -> Tuple[Seconds, Optional[Seconds]]:
         """
         This method helps estimate the original offset and duration for a recording
@@ -222,9 +231,9 @@ class Tempo(AudioAugment):
         We need this estimate to know how much audio to actually load from disk during the
         call to ``load_audio()``.
         """
-        start_sample = compute_num_samples(offset, sampling_rate)
+        start_sample = compute_num_samples(offset, sample_rate)
         num_samples = (
-            compute_num_samples(duration, sampling_rate)
+            compute_num_samples(duration, sample_rate)
             if duration is not None
             else None
         )
@@ -235,8 +244,8 @@ class Tempo(AudioAugment):
             else None
         )
         return (
-            start_sample / sampling_rate,
-            num_samples / sampling_rate if num_samples is not None else None,
+            start_sample / sample_rate,
+            num_samples / sample_rate if num_samples is not None else None,
         )
 
 
@@ -251,19 +260,17 @@ class Volume(AudioAugment):
 
     factor: float
 
-    def __call__(self, samples: np.ndarray, sampling_rate: int) -> np.ndarray:
+    def __call__(self, samples: ArrayType, sample_rate: int) -> ArrayType:
         if isinstance(samples, np.ndarray):
             samples = torch.from_numpy(samples)
-        augmented, _ = torchaudio.sox_effects.apply_effects_tensor(
-            samples, sampling_rate, [["vol", str(self.factor)]]
-        )
-        return augmented.numpy()
+        augmented = torchaudio.transforms.Vol(gain=self.factor, gain_type='amplitude')(samples)
+        return augmented
 
     def reverse_timestamps(
         self,
         offset: Seconds,
         duration: Optional[Seconds],
-        sampling_rate: Optional[int],  # Not used, made for compatibility purposes
+        sample_rate: Optional[int],  # Not used, made for compatibility purposes
     ) -> Tuple[Seconds, Optional[Seconds]]:
         """
         This method just returnes the original offset and duration as volume perturbation

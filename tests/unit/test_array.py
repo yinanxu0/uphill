@@ -62,7 +62,7 @@ def test_documentarray_access_document(dir_path_and_pattern):
     da = DocumentArray.from_dir(dir_path, pattern=pattern)
     
     assert da.num_channels("A_16k_c1") == [0]
-    assert da.sampling_rate("A_16k_c1") == 16000
+    assert da.sample_rate("A_16k_c1") == 16000
     assert da.num_samples("A_16k_c1") == 95984
     assert da.duration("A_16k_c1") == 5.999
 
